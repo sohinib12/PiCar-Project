@@ -17,20 +17,20 @@ class Car:
 
         # Use BCM pin numbering
         servo_pin = 17  # Use BCM pin 17 (equivalent to BOARD pin 11)
-        # Set up the PWM for the servo
+        # Setup the PWM for the servo
         self.duty = 2
         GPIO.setup(servo_pin, GPIO.OUT)
         servo = GPIO.PWM(servo_pin, 50)  # 50Hz pulse
         self.servo = servo
 
-        # set up the distance sensor
-        #Define the GPIO pins for trigger and echo
+        # setup the distance sensor
+        # Define the GPIO pins for trigger and echo
         TRIG_PIN = 24  # Trigger pin
         ECHO_PIN = 23  # Echo pin
 
         self.trig_pin = TRIG_PIN
         self.echo_pin = ECHO_PIN
-        # Set up the GPIO pins
+        # Setup the GPIO pins
         GPIO.setup(TRIG_PIN, GPIO.OUT)
         GPIO.setup(ECHO_PIN, GPIO.IN)
 
@@ -132,3 +132,91 @@ class Car:
         self.servo.stop()
         GPIO.cleanup()
         print("Goodbye")
+
+    def measure_distance(self):
+        # Send a short pulse to trigger the ultrasonic sensor
+        GPIO.output(self.trig_pin, GPIO.HIGH)
+        time.sleep(0.00001)
+        GPIO.output(self.trig_pin, GPIO.LOW)
+
+        pulse_start_time = time.time()
+        pulse_end_time = time.time()
+
+        # Listen to the echo response
+        while GPIO.input(self.echo_pin) == 0:
+            pulse_start_time = time.time()
+
+        while GPIO.input(self.echo_pin) == 1:
+            pulse_end_time = time.time()
+
+        # Calculate the duration of the echo
+        pulse_duration = pulse_end_time - pulse_start_time
+
+        # Speed of sound at sea level is approximately 343 meters/second
+        # Divide by 2 because the sound travels to the object and back
+        distance = (pulse_duration * 34300) / 2
+
+        return distance
+
+    def servo_start(self):
+        self.servo.start(0)
+        time.sleep(1)
+
+    def servo_move_left(self):
+        # Decrease the duty cycle to move the servo to the left
+        self.servo.ChangeDutyCycle(DUTY_CYCLE_CENTER - 1.0)
+        time.sleep(1)  # Adjust the delay as needed
+
+    def servo_move_right(self):
+        # Increase the duty cycle to move the servo to the right
+        self.servo.ChangeDutyCycle(DUTY_CYCLE_CENTER + 1.0)
+        time.sleep(1)  # Adjust the delay as needed
+
+    def check_space(self):
+        self.stop()
+        time.sleep(0.5)
+        self.move_backward()
+        time.sleep(1.5)
+        l1 = self.look_left()
+        l2 = self.look_right()
+        print(f'left side is clear {l1:.2f} cm')
+        print(f'right side is clear {l2:.2f} cm')
+        # turn to the side where it can find some space
+        if l1 > l2 and l1 > THRESHOLD_DISTANCE:
+            self.move_left()
+            time.sleep(1)
+            self.stop()
+
+        elif l2> l1 and l2 > THRESHOLD_DISTANCE:
+            self.move_right()
+            time.sleep(1)
+            self.stop()
+        else:
+            l3 = self.look_left()
+            l4 = self.look_right()
+            if l3 > l4:
+                self.move_left()
+                time.sleep(1)
+            else:
+                self.move_right()
+                time.sleep(1)
+
+car = Car()
+car.servo_start()
+
+try:
+    while True:
+        distance = car.measure_distance()  # Measure the distance
+        print(f'All clear. distance is {distance:.2f} cm')
+        if distance < THRESHOLD_DISTANCE:
+            car.stop()  # Stop if something is too close
+            car.check_space()
+        else:
+            car.move_forward()  # Move forward if the path is clear
+
+        time.sleep(0.5)
+
+except KeyboardInterrupt:
+    car.stop()
+    time.sleep(1)
+    car.turn_off()
